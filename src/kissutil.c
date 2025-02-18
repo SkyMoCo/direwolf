@@ -38,19 +38,10 @@
 
 #include "direwolf.h"		// Sets _WIN32_WINNT for XP API level needed by ws2tcpip.h
 
-#if __WIN32__
-
-#include <winsock2.h>
-#include <ws2tcpip.h>  		// _WIN32_WINNT must be set to 0x0501 before including this
-
-#else 
-
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-
-#endif
 
 #include <unistd.h>
 #include <stdio.h>
@@ -836,7 +827,7 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	        dw_printf ("Save received frame to %s\n", path);
 	        fp = fopen (path, "w");
 	        if (fp != NULL) {
-	          fprintf (fp, "%s %s%s\n", prefix, addrs, pinfo);
+	          fprintf (fp, "%s Address %s%s\n", prefix, addrs, pinfo);
 	          fclose (fp);
 	        }
 	        else {
