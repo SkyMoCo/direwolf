@@ -89,6 +89,9 @@ static void usage2(void);
 
 /* Obtained from the command line. */
 
+static char callsign[7] = "";  /* -c option */
+						/* For filtering only packets for that callsign */
+
 static char hostname[50] = "localhost";		/* -h option. */
 						/* DNS host name or IPv4 address. */
 						/* Some of the code is there for IPv6 but */
@@ -196,13 +199,15 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "h:p:s:vf:o:T:",
+          c = getopt_long(argc, argv, "h:p:s:vf:o:T:c:",
 			long_options, &option_index);
           if (c == -1)
             break;
 
           switch (c) {
-
+			case 'c':               /* -c for callsign filter */
+				strlcpy (callsign, optarg, sizeof(callsign));
+              break;
             case 'h':				/* -h for hostname. */
 	      strlcpy (hostname, optarg, sizeof(hostname));
               break;
@@ -813,6 +818,8 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
  *	TZ=UTC kissutil ...
  */
 	      if (strlen(receive_output) > 0) {
+			  if(strlen(callsign) > 0 && strncmp(callsign,addrs,6) != 0) break;   /* Don't save unwanted callsigns */
+
 		char fname [30];
 	        char path [300];
 	        FILE *fp;
@@ -827,7 +834,7 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 	        dw_printf ("Save received frame to %s\n", path);
 	        fp = fopen (path, "w");
 	        if (fp != NULL) {
-	          fprintf (fp, "%s Address %s%s\n", prefix, addrs, pinfo);
+	          fprintf (fp, "%s %s %s\n", prefix, addrs, pinfo);
 	          fclose (fp);
 	        }
 	        else {
