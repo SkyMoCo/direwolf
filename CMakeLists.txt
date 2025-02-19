@@ -312,6 +312,17 @@ else()
   set(GPSD_LIBRARIES "")
 endif()
 
+find_package(MQTT)
+
+if(MQTT_FOUND)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DENABLE_MQTT")
+  message(STATUS "Including MQTT")
+else()
+message(STATUS "Not including MQTT")
+  set(MQTT_INCLUDE_DIRS "")
+  set(MQTT_LIBRARY "")
+endif()
+
 find_package(hamlib)
 if(HAMLIB_FOUND)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_HAMLIB")

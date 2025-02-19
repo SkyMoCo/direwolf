@@ -52,6 +52,7 @@
 #include <getopt.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <MQTTClient.h> // From https://github.com/eclipse-paho/paho.mqtt.c.git
 
 #include "ax25_pad.h"
 #include "textcolor.h"
@@ -84,13 +85,49 @@ static void hex_dump (unsigned char *p, int len);
 static void usage(void);
 static void usage2(void);
 
+#define ADDRESS     "tcp://172.26.0.7:1883"
+#define CLIENTID    "ExampleClientPub"
+#define TOPIC       "KK7CXF"
+#define PAYLOAD     "Hello World!"
+#define QOS         1
+#define TIMEOUT     10000L
 
+MQTTClient_deliveryToken deliveredtoken;
 
+void delivered(void *context, MQTTClient_deliveryToken dt)
+{
+    printf("Message with token value %d delivery confirmed\n", dt);
+    deliveredtoken = dt;
+}
+
+int msgarrvd(void *context, char *topicName, int topicLen, MQTTClient_message *message)
+{
+    printf("Message arrived\n");
+    printf("     topic: %s\n", topicName);
+    printf("   message: %.*s\n", message->payloadlen, (char*)message->payload);
+    MQTTClient_freeMessage(&message);
+    MQTTClient_free(topicName);
+    return 1;
+}
+
+void connlost(void *context, char *cause)
+{
+    printf("\nConnection to MQTT Server lost\n");
+    if (cause)
+        printf("     cause: %s\n", cause);
+}
+
+MQTTClient mqttclient;
+MQTTClient_message pubmsg = MQTTClient_message_initializer;
+MQTTClient_deliveryToken token;
 
 /* Obtained from the command line. */
-
 static char callsign[7] = "";  /* -c option */
 						/* For filtering only packets for that callsign */
+
+static char mqtt_topic[120] = "";  /* -t option */ 
+						/* For sending received packets to an MQTT server */
+
 
 static char hostname[50] = "localhost";		/* -h option. */
 						/* DNS host name or IPv4 address. */
@@ -173,10 +210,63 @@ static void trim (char *stuff)
 
 int main (int argc, char *argv[])
 {
+	
+    MQTTClient_connectOptions conn_opts = MQTTClient_connectOptions_initializer;
+    
+   
+    int rc;
+
 	text_color_init (0);	// Turn off text color.
 				// It could interfere with trying to pipe stdout to some other application.
 
-#if __WIN32__
+	const char* uri = ADDRESS;
+
+	if ((rc = MQTTClient_create(&mqttclient, uri, CLIENTID,MQTTCLIENT_PERSISTENCE_NONE, NULL)) != MQTTCLIENT_SUCCESS)
+	{
+		dw_printf("Failed to create client, return code was %d\n", rc);
+		exit(-1);
+	}
+	dw_printf("MQTT Client create rc, wants %d, was %d\n", 0, rc);
+
+	if ((rc = MQTTClient_setCallbacks(mqttclient, NULL, connlost, msgarrvd, delivered)) != MQTTCLIENT_SUCCESS)
+    {
+        dw_printf("Failed to set callbacks, return code %d\n", rc);
+        exit(-1);
+    }
+
+    conn_opts.keepAliveInterval = 20;
+    conn_opts.cleansession = 1;
+    if ((rc = MQTTClient_connect(mqttclient, &conn_opts)) != MQTTCLIENT_SUCCESS)
+    {
+        dw_printf("Failed to connect, return code %d\n", rc);
+        exit(-1);
+    }
+
+    pubmsg.payload = PAYLOAD;
+    pubmsg.payloadlen = (int)strlen(PAYLOAD);
+    pubmsg.qos = QOS;
+    pubmsg.retained = 0;
+    deliveredtoken = 0;
+    if ((rc = MQTTClient_publishMessage(mqttclient, TOPIC, &pubmsg, &token)) != MQTTCLIENT_SUCCESS)
+    {
+        printf("Failed to publish message, return code %d\n", rc);
+        rc = EXIT_FAILURE;
+    }
+    else
+    {
+        printf("Waiting for publication of %s\n"
+            "on topic %s for client with ClientID: %s\n",
+            PAYLOAD, TOPIC, CLIENTID);
+			sleep(90);
+    }
+
+    //if ((rc = MQTTClient_disconnect(mqttclient, 10000)) != MQTTCLIENT_SUCCESS)
+    //{
+    //    printf("Failed to disconnect, return code %d\n", rc);
+    //    rc = EXIT_FAILURE;
+    // }
+		
+	#if __WIN32__
 
 #else
 	int e;
@@ -199,12 +289,15 @@ int main (int argc, char *argv[])
 
 	  /* ':' following option character means arg is required. */
 
-          c = getopt_long(argc, argv, "h:p:s:vf:o:T:c:",
+          c = getopt_long(argc, argv, "h:p:s:vf:o:t:c:",
 			long_options, &option_index);
           if (c == -1)
             break;
 
           switch (c) {
+			case 't':
+				strlcpy (mqtt_topic, optarg, sizeof(mqtt_topic));
+				break;
 			case 'c':               /* -c for callsign filter */
 				strlcpy (callsign, optarg, sizeof(callsign));
               break;
@@ -809,6 +902,35 @@ void kiss_process_msg (unsigned char *kiss_msg, int kiss_len, int debug, struct 
 #if __WIN32__
 	      fflush (stdout);
 #endif
+
+
+/* 
+* Send to MQTT server if -T is passed with a topic
+* Servername and Port can also be specified
+*/
+
+if(strlen(mqtt_topic) > 0) {
+	dw_printf ("Publishing to topic %s\n", mqtt_topic);
+	pubmsg.payload = pinfo;
+    pubmsg.payloadlen = (int)strlen(pubmsg.payload);
+    pubmsg.qos = QOS;
+    pubmsg.retained = 0;
+    deliveredtoken = 0;
+	int rc = 0;
+
+    if ((rc = MQTTClient_publishMessage(mqttclient, TOPIC, &pubmsg, &token)) != MQTTCLIENT_SUCCESS)
+    {
+        printf("Failed to publish message, return code %d\n", rc);
+        rc = EXIT_FAILURE;
+    }
+    else
+    {
+        printf("Waiting for publication of %s\n"
+            "on topic %s for client with ClientID: %s\n",
+            PAYLOAD, TOPIC, CLIENTID);
+    }
+}
+
 
 /*
  * Add to receive queue directory if specified.

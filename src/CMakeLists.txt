@@ -3,6 +3,7 @@
 # not ideal but not so slow
 # otherwise use target_include_directories
 include_directories(
+  ${MQTT_INCLUDE_DIRS}
   ${GPSD_INCLUDE_DIRS}
   ${HAMLIB_INCLUDE_DIRS}
   ${ALSA_INCLUDE_DIRS}
@@ -442,6 +443,7 @@ set_target_properties(kissutil
 
 target_link_libraries(kissutil
   ${MISC_LIBRARIES}
+  ${MQTT_LIBRARY}
   Threads::Threads
   )
 
